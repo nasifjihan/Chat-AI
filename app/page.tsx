@@ -49,7 +49,8 @@ export default function Home() {
     if (!el) return;
 
     const onScroll = () => {
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const distanceFromBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight;
       const isNearBottom = distanceFromBottom < 120;
       shouldStickToBottomRef.current = isNearBottom;
       setShowJump(!isNearBottom && el.scrollHeight > el.clientHeight + 40);
@@ -121,9 +122,9 @@ export default function Home() {
 
       if (!res.ok) {
         if (contentType.includes("application/json")) {
-          const payload = (await res.json().catch(() => null)) as
-            | { message?: string }
-            | null;
+          const payload = (await res.json().catch(() => null)) as {
+            message?: string;
+          } | null;
           throw new Error(payload?.message || "Request failed");
         }
 
@@ -132,9 +133,10 @@ export default function Home() {
       }
 
       if (contentType.includes("application/json")) {
-        const payload = (await res.json().catch(() => null)) as
-          | { response?: string; message?: string }
-          | null;
+        const payload = (await res.json().catch(() => null)) as {
+          response?: string;
+          message?: string;
+        } | null;
         throw new Error(payload?.message || "Unexpected JSON response");
       }
 
@@ -193,10 +195,16 @@ export default function Home() {
         const next = [...prev];
         const last = next[next.length - 1];
         if (last?.role === "assistant" && last.content === "") {
-          next[next.length - 1] = { role: "assistant", content: `Error: ${errorMessage}` };
+          next[next.length - 1] = {
+            role: "assistant",
+            content: `Error: ${errorMessage}`,
+          };
           return next;
         }
-        return [...next, { role: "assistant", content: `Error: ${errorMessage}` }];
+        return [
+          ...next,
+          { role: "assistant", content: `Error: ${errorMessage}` },
+        ];
       });
     } finally {
       abortRef.current = null;
@@ -272,7 +280,7 @@ export default function Home() {
       <div className="relative">
         <div
           ref={listRef}
-          className="chat-scroll h-[calc(100vh-310px)] space-y-3 overflow-y-auto rounded-3xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
+          className="chat-scroll h-[calc(100vh-410px)] space-y-3 overflow-y-auto rounded-3xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
         >
           {messages.length === 0 && (
             <div className="mx-auto mt-10 max-w-md rounded-3xl border border-white/10 bg-black/30 p-5 text-sm text-zinc-300">
@@ -283,7 +291,8 @@ export default function Home() {
           {messages.map((msg, index) => {
             const isUser = msg.role === "user";
             const isLast = index === messages.length - 1;
-            const showThinking = !isUser && isLast && loading && msg.content === "";
+            const showThinking =
+              !isUser && isLast && loading && msg.content === "";
 
             return (
               <div
@@ -304,7 +313,9 @@ export default function Home() {
                   ) : (
                     <>
                       {isUser ? (
-                        <span className="whitespace-pre-wrap">{msg.content}</span>
+                        <span className="whitespace-pre-wrap">
+                          {msg.content}
+                        </span>
                       ) : (
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -370,9 +381,7 @@ export default function Home() {
 
                               if (isBlock) {
                                 return (
-                                  <code className="text-zinc-100">
-                                    {value}
-                                  </code>
+                                  <code className="text-zinc-100">{value}</code>
                                 );
                               }
 
@@ -392,9 +401,7 @@ export default function Home() {
                                 {children}
                               </blockquote>
                             ),
-                            hr: () => (
-                              <hr className="my-3 border-zinc-800" />
-                            ),
+                            hr: () => <hr className="my-3 border-zinc-800" />,
                           }}
                         >
                           {msg.content}
@@ -440,7 +447,7 @@ export default function Home() {
         <button
           type="submit"
           disabled={loading || !message.trim()}
-          className="rounded-2xl bg-white px-6 py-3 font-medium text-black disabled:opacity-60"
+          className="rounded-2xl bg-white px-6 py-2 font-bold text-black disabled:opacity-60"
         >
           Send
         </button>

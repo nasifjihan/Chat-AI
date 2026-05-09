@@ -40,10 +40,7 @@ export default function RootLayout({
             </Link>
 
             <nav className="flex items-center gap-1 text-sm text-zinc-200">
-              <Link
-                href="/"
-                className="rounded-lg px-3 py-2 hover:bg-white/5"
-              >
+              <Link href="/" className="rounded-lg px-3 py-2 hover:bg-white/5">
                 Chat
               </Link>
               <Link
@@ -65,7 +62,7 @@ export default function RootLayout({
         <div className="flex-1">{children}</div>
 
         <footer className="border-t border-white/5">
-          <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-6 text-sm text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-5 text-sm text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
             <p>Built with Next.js + Gemini</p>
             <div className="flex items-center gap-4">
               <a
