@@ -12,12 +12,33 @@ interface Message {
 
 export default function Home() {
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("chat.messages");
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        (m): m is Message =>
+          typeof m === "object" &&
+          m !== null &&
+          (m as { role?: unknown }).role !== undefined &&
+          ((m as { role?: unknown }).role === "user" ||
+            (m as { role?: unknown }).role === "assistant") &&
+          typeof (m as { content?: unknown }).content === "string",
+      );
+    } catch {
+      return [];
+    }
+  });
   const [loading, setLoading] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
+  const [showJump, setShowJump] = useState(false);
 
   const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
     bottomRef.current?.scrollIntoView({ behavior, block: "end" });
@@ -29,7 +50,9 @@ export default function Home() {
 
     const onScroll = () => {
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      shouldStickToBottomRef.current = distanceFromBottom < 120;
+      const isNearBottom = distanceFromBottom < 120;
+      shouldStickToBottomRef.current = isNearBottom;
+      setShowJump(!isNearBottom && el.scrollHeight > el.clientHeight + 40);
     };
 
     onScroll();
@@ -42,6 +65,12 @@ export default function Home() {
       scrollToBottom("auto");
     }
   }, [messages, loading]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("chat.messages", JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
 
   const sendMessage = async () => {
     if (!message.trim()) return;
@@ -65,13 +94,26 @@ export default function Home() {
     setLoading(true);
 
     try {
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const conversation = [...messages, userMessage]
+        .filter((m) => m.content.trim() !== "")
+        .slice(-20)
+        .map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        }));
+
       const res = await fetch("/api", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        signal: controller.signal,
         body: JSON.stringify({
           message: currentMessage,
+          contents: conversation,
         }),
       });
 
@@ -124,6 +166,26 @@ export default function Home() {
         });
       }
     } catch (error) {
+      const isAborted =
+        (error instanceof DOMException && error.name === "AbortError") ||
+        (error instanceof Error && error.name === "AbortError") ||
+        (error instanceof Error &&
+          typeof error.message === "string" &&
+          error.message.toLowerCase().includes("aborted"));
+
+      if (isAborted) {
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === "assistant" && last.content === "") {
+            next[next.length - 1] = { role: "assistant", content: "Stopped." };
+            return next;
+          }
+          return [...next, { role: "assistant", content: "Stopped." }];
+        });
+        return;
+      }
+
       console.error(error);
       const errorMessage =
         error instanceof Error ? error.message : "Something went wrong";
@@ -137,27 +199,84 @@ export default function Home() {
         return [...next, { role: "assistant", content: `Error: ${errorMessage}` }];
       });
     } finally {
+      abortRef.current = null;
       setLoading(false);
     }
   };
 
+  const clearChat = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
+    setMessages([]);
+    try {
+      window.localStorage.removeItem("chat.messages");
+    } catch {}
+  };
+
   return (
-    <main className="min-h-screen bg-black text-white">
-      <div className="mx-auto flex max-h-screen max-w-3xl flex-col px-4 py-6">
-        <div className="mb-4 flex items-end justify-between gap-3">
+    <main className="mx-auto w-full max-w-5xl px-4 py-6">
+      <div className="mb-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">AI Chat</h1>
-            <p className="text-sm text-zinc-400">Streaming responses</p>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Chat workspace
+            </h1>
+            <p className="mt-1 text-sm text-zinc-300">
+              Model:{" "}
+              <span className="text-zinc-100">gemini-3-flash-preview</span>
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {loading ? (
+              <button
+                type="button"
+                onClick={() => abortRef.current?.abort()}
+                className="rounded-xl border border-white/10 bg-black/30 px-4 py-2 text-sm text-zinc-100 hover:bg-black/40"
+              >
+                Stop
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={clearChat}
+              className="rounded-xl border border-white/10 bg-black/30 px-4 py-2 text-sm text-zinc-100 hover:bg-black/40"
+              disabled={loading || messages.length === 0}
+            >
+              New chat
+            </button>
           </div>
         </div>
 
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            "Summarize this topic in bullets",
+            "Write a professional email",
+            "Help me debug this error",
+            "Give me a study plan",
+          ].map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setMessage(p)}
+              className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-zinc-200 hover:bg-black/30"
+              disabled={loading}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative">
         <div
           ref={listRef}
-          className="chat-scroll flex-1 space-y-3 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4"
+          className="chat-scroll h-[calc(100vh-310px)] space-y-3 overflow-y-auto rounded-3xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
         >
           {messages.length === 0 && (
-            <div className="mx-auto mt-10 max-w-md rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4 text-sm text-zinc-400">
-              Ask a question to start the conversation.
+            <div className="mx-auto mt-10 max-w-md rounded-3xl border border-white/10 bg-black/30 p-5 text-sm text-zinc-300">
+              Type a message, press Enter, and the response will stream in.
             </div>
           )}
 
@@ -174,8 +293,8 @@ export default function Home() {
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 text-[15px] leading-relaxed ${
                     isUser
-                      ? "bg-blue-600 text-white"
-                      : "bg-zinc-900 text-zinc-100 border border-zinc-800"
+                      ? "bg-gradient-to-r from-sky-500 via-indigo-500 to-fuchsia-500 text-white"
+                      : "bg-black/35 text-zinc-100 border border-white/10"
                   }`}
                 >
                   {showThinking ? (
@@ -291,31 +410,41 @@ export default function Home() {
           <div ref={bottomRef} />
         </div>
 
-        <form
-          className="mt-4 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void sendMessage();
-          }}
-        >
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Type a message…"
-            disabled={loading}
-            className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-[15px] outline-none placeholder:text-zinc-500 focus:border-zinc-600 disabled:opacity-60"
-          />
-
+        {showJump ? (
           <button
-            type="submit"
-            disabled={loading || !message.trim()}
-            className="rounded-xl bg-white px-6 py-3 font-medium text-black disabled:opacity-60"
+            type="button"
+            onClick={() => scrollToBottom("smooth")}
+            className="absolute bottom-4 right-4 rounded-full border border-white/10 bg-black/50 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur hover:bg-black/60"
           >
-            Send
+            Jump to latest
           </button>
-        </form>
+        ) : null}
       </div>
+
+      <form
+        className="mt-4 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void sendMessage();
+        }}
+      >
+        <input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Type a message…"
+          disabled={loading}
+          className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-[15px] outline-none placeholder:text-zinc-500 focus:border-white/20 disabled:opacity-60"
+        />
+
+        <button
+          type="submit"
+          disabled={loading || !message.trim()}
+          className="rounded-2xl bg-white px-6 py-3 font-medium text-black disabled:opacity-60"
+        >
+          Send
+        </button>
+      </form>
     </main>
   );
 }

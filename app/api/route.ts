@@ -10,8 +10,9 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const message =
       typeof body?.message === "string" ? body.message.trim() : "";
+    const contents = Array.isArray(body?.contents) ? body.contents : null;
 
-    if (!message) {
+    if (!message && !contents) {
       return NextResponse.json(
         { success: false, message: "Missing message" },
         { status: 400 },
@@ -20,7 +21,13 @@ export async function POST(req: Request) {
 
     const responseStream = await ai.models.generateContentStream({
       model: "gemini-3-flash-preview",
-      contents: message,
+      contents: contents ?? message,
+      config: {
+        systemInstruction:
+          "You are a helpful assistant. Format responses with Markdown. Prefer concise, accurate answers with clear structure.",
+        temperature: 0.7,
+        maxOutputTokens: 800,
+      },
     });
 
     const encoder = new TextEncoder();
